@@ -211,7 +211,7 @@ function updateHostComponent(fiber) {
   }
   reconcileChildren(fiber, fiber.props.children);
 }
-
+console.log(123)
 // 调和
 function reconcileChildren(wipFiber, elements) {
   let index = 0;
