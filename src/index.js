@@ -1,3 +1,12 @@
+
+let nextUnitOfWork = null;
+let currentRoot = null;
+let workInProgress = null;
+let deletions = null;
+
+let wipFiber = null;
+let hookIndex = null;
+
 function createElement(type, props, ...children) {
   return {
     type,
@@ -73,11 +82,10 @@ function updateDom(dom, prevProps, nextProps) {
 
 function commitRoot() {
   deletions.forEach(commitWork);
-  commitWork(wipRoot.child);
-  currentRoot = wipRoot;
-  wipRoot = null;
+  commitWork(workInProgress.child);
+  currentRoot = workInProgress;
+  workInProgress = null;
 }
-
 function commitWork(fiber) {
   if (!fiber) {
     return;
@@ -110,7 +118,7 @@ function commitDeletion(fiber, domParent) {
 }
 
 function render(element, container) {
-  wipRoot = {
+  workInProgress = {
     dom: container,
     props: {
       children: [element]
@@ -118,13 +126,8 @@ function render(element, container) {
     alternate: currentRoot
   };
   deletions = [];
-  nextUnitOfWork = wipRoot;
+  nextUnitOfWork = workInProgress;
 }
-
-let nextUnitOfWork = null;
-let currentRoot = null;
-let wipRoot = null;
-let deletions = null;
 
 function workLoop(deadline) {
   let shouldYield = false;
@@ -134,8 +137,8 @@ function workLoop(deadline) {
     shouldYield = deadline.timeRemaining() < 1; // 剩余时间是否小于1ms 代表任务繁忙
   }
 
-  // 没有fiber并且时间空闲了
-  if (!nextUnitOfWork && wipRoot) {
+  // 没有fiber并且wip存在
+  if (!nextUnitOfWork && workInProgress) {
     commitRoot();
   }
   // 繁忙时继续执行主任务
@@ -163,15 +166,13 @@ function performUnitOfWork(fiber) {
   }
 }
 
-let wipFiber = null;
-let hookIndex = null;
-
 function updateFunctionComponent(fiber) {
   wipFiber = fiber;
   hookIndex = 0;
   wipFiber.hooks = [];
   const children = [fiber.type(fiber.props)];
   reconcileChildren(fiber, children);
+  console.log('updateFunctionComponent', fiber, wipFiber, workInProgress.child)
 }
 
 function useState(initial) {
@@ -191,12 +192,12 @@ function useState(initial) {
 
   const setState = action => {
     hook.queue.push(action);
-    wipRoot = {
+    workInProgress = {
       dom: currentRoot.dom,
       props: currentRoot.props,
       alternate: currentRoot
     };
-    nextUnitOfWork = wipRoot;
+    nextUnitOfWork = workInProgress;
     deletions = [];
   };
 
@@ -216,7 +217,6 @@ function reconcileChildren(wipFiber, elements) {
   let index = 0;
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let prevSibling = null;
-
   while (index < elements.length || oldFiber != null) {
     const element = elements[index];
     let newFiber = null;
@@ -271,10 +271,10 @@ const Didact = {
 
 /** @jsx Didact.createElement */
 function Counter() {
-  const [state, setState] = Didact.useState(1);
+  const [state1, setState1] = Didact.useState(2);
   return (
-    <h1 onClick={() => setState(c => c + 1)} style="user-select: none">
-      Count: {state}
+    <h1 onClick={() => { setState1(c => c + 1) }} style="user-select: none">
+      Count: {state1}
     </h1>
   );
 }
