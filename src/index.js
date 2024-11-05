@@ -1,4 +1,6 @@
 
+// https://github.com/facebook/react/blob/603e6108f39c6663ec703eed34a89ff1bf0cb70c/packages/react-reconciler/src/ReactFiberRootScheduler.js#L42
+
 let nextUnitOfWork = null;
 let currentRoot = null;
 let workInProgress = null;
@@ -6,6 +8,8 @@ let deletions = null;
 
 let wipFiber = null;
 let hookIndex = null;
+let workInProgressHook = null;
+let oldHook = null;
 
 function createElement(type, props, ...children) {
   return {
@@ -91,9 +95,9 @@ function commitWork(fiber) {
     return;
   }
 
-  let domParentFiber = fiber.parent;
+  let domParentFiber = fiber.return;
   while (!domParentFiber.dom) {
-    domParentFiber = domParentFiber.parent;
+    domParentFiber = domParentFiber.return;
   }
   const domParent = domParentFiber.dom;
 
@@ -147,7 +151,10 @@ function workLoop(deadline) {
 
 requestIdleCallback(workLoop);
 
+// https://github.com/facebook/react/blob/603e6108f39c6663ec703eed34a89ff1bf0cb70c/packages/react-reconciler/src/ReactFiberWorkLoop.js#L189
 function performUnitOfWork(fiber) {
+  // console.log('performUnitOfWork', fiber)
+  // beginWork
   const isFunctionComponent = fiber.type instanceof Function;
   if (isFunctionComponent) {
     updateFunctionComponent(fiber);
@@ -162,34 +169,45 @@ function performUnitOfWork(fiber) {
     if (nextFiber.sibling) {
       return nextFiber.sibling;
     }
-    nextFiber = nextFiber.parent;
+    nextFiber = nextFiber.return;
   }
 }
-
+// beginWork
 function updateFunctionComponent(fiber) {
   wipFiber = fiber;
   hookIndex = 0;
-  wipFiber.hooks = [];
+  wipFiber.memoizedState = null;
+  console.log('updateFunctionComponent', wipFiber.alternate?.memoizedState)
   const children = [fiber.type(fiber.props)];
   reconcileChildren(fiber, children);
-  console.log('updateFunctionComponent', fiber, wipFiber, workInProgress.child)
+
+
+
 }
 
 function useState(initial) {
-  const oldHook =
-    wipFiber.alternate &&
-    wipFiber.alternate.hooks &&
-    wipFiber.alternate.hooks[hookIndex];
+  if (!oldHook) {
+    oldHook = wipFiber.alternate?.memoizedState
+  }
+
   const hook = {
     state: oldHook ? oldHook.state : initial,
-    queue: []
+    queue: [],
+    next: oldHook ? oldHook.next : null,
   };
-
+  // 
   const actions = oldHook ? oldHook.queue : [];
   actions.forEach(action => {
     hook.state = action(hook.state);
   });
-
+  // 构建 hook 链表
+  if (!workInProgressHook) {
+    workInProgressHook = hook
+    wipFiber.memoizedState = workInProgressHook;
+  } else {
+    workInProgressHook = workInProgressHook.next = hook
+  }
+  oldHook = oldHook && oldHook.next
   const setState = action => {
     hook.queue.push(action);
     workInProgress = {
@@ -197,23 +215,28 @@ function useState(initial) {
       props: currentRoot.props,
       alternate: currentRoot
     };
+    oldHook = null
+    workInProgressHook = null
     nextUnitOfWork = workInProgress;
     deletions = [];
   };
-
-  wipFiber.hooks.push(hook);
-  hookIndex++;
+  // console.log(123123, hook)
+  // wipFiber.hooks.push(hook);
+  // hookIndex++;
   return [hook.state, setState];
 }
 
 function updateHostComponent(fiber) {
   if (!fiber.dom) {
+
     fiber.dom = createDom(fiber);
+    // console.log(13123, fiber.dom)
   }
   reconcileChildren(fiber, fiber.props.children);
 }
 // 调和
 function reconcileChildren(wipFiber, elements) {
+  // console.log('reconcileChildren', elements);
   let index = 0;
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let prevSibling = null;
@@ -228,7 +251,7 @@ function reconcileChildren(wipFiber, elements) {
         type: oldFiber.type,
         props: element.props,
         dom: oldFiber.dom,
-        parent: wipFiber,
+        return: wipFiber,
         alternate: oldFiber,
         effectTag: "UPDATE"
       };
@@ -238,7 +261,7 @@ function reconcileChildren(wipFiber, elements) {
         type: element.type,
         props: element.props,
         dom: null,
-        parent: wipFiber,
+        return: wipFiber,
         alternate: null,
         effectTag: "PLACEMENT"
       };
@@ -263,21 +286,27 @@ function reconcileChildren(wipFiber, elements) {
   }
 }
 
-const Didact = {
+const MiniReact = {
   createElement,
   render,
   useState
 };
 
-/** @jsx Didact.createElement */
+/** @jsx MiniReact.createElement */
 function Counter() {
-  const [state1, setState1] = Didact.useState(2);
+  const [state, setState] = MiniReact.useState(2);
+  const [state1, setState1] = MiniReact.useState(6);
+  const [state4, setState4] = MiniReact.useState(7);
   return (
-    <h1 onClick={() => { setState1(c => c + 1) }} style="user-select: none">
-      Count: {state1}
-    </h1>
+    <div>
+      <h1 onClick={() => { setState(c => c + 1) }} style="user-select: none">
+        Count: {state}
+      </h1>
+      <p onClick={() => { setState1(c => c + 1) }}>Count: {state1}</p>
+      <p>Count: {state4}</p>
+    </div>
   );
 }
 const element = <Counter />;
 const container = document.getElementById("root");
-Didact.render(element, container);
+MiniReact.render(element, container);
